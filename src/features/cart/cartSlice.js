@@ -86,8 +86,16 @@ const cartSlice = createSlice({
 
             victim.quantity = newQuantity;
             state.info = "quantity updated";
-        }
+        },
+        clearCartMessages(state) {
+            state.info = null;
+            state.error = null;
+        },
+        setCartError(state, action) {
+            state.info = null;
+            state.error = action.payload ?? "Unknown cart error";
+        },
     },
 });
-export const {addItem, removeItem, changeQuantity} = cartSlice.actions;
+export const {addItem, removeItem, changeQuantity, setCartError, clearCartMessages} = cartSlice.actions;
 export const cartReducer = cartSlice.reducer;
