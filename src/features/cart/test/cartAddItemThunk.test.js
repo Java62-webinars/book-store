@@ -47,9 +47,3 @@ describe("addItemToCart thunk", () => {
     })
 })
 
-//Для интеграционного теста
-// return configureStore ({
-//reducer: {
-// catalog :catalogReducer,
-// cart : cartReducer,
-//
