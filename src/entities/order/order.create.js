@@ -18,7 +18,7 @@ import {validateOrder} from "./order.validate.js";
  * 4) валидирует итоговый order через validateOrder(order)
  *
  * Важно:
- * - не пишет в localStorage
+ * - не пишет в localStorage / в БД
  * - не трогает Redux
  *
  * @param {Object} params
