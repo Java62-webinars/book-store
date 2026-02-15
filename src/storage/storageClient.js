@@ -6,11 +6,11 @@
 
 export function readJson(key){
     try{
+        if (typeof localStorage === "undefined") return null;
         const raw = localStorage.getItem(key);
         if(!raw) return null;
         return JSON.parse(raw);
     }catch(e){
-        //TODO add notification
         console.log(e.message);
         return null;
     }
@@ -24,10 +24,10 @@ export function readJson(key){
 
 export function writeJson(key, value){
     try{
+        if (typeof localStorage === "undefined") return;
         const raw = JSON.stringify(value);
         localStorage.setItem(key, raw);
     }catch(e){
-        //TODO add notification
         console.log(e.message);
     }
 }
@@ -40,9 +40,9 @@ export function writeJson(key, value){
  */
 export function remove(key){
     try{
+        if (typeof localStorage === "undefined") return;
         localStorage.removeItem(key);
     }catch(e){
         console.log(e.message);
-        //TODO add notification
     }
 }
