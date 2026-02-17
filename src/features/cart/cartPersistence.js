@@ -8,7 +8,7 @@ import {removeCartFromStorage, saveCartToStorage} from "./cartStorage.js";
  * - Поэтому сохраняем ТОЛЬКО если cartItems реально изменились (snapshot).
  *
  * @param {import("@reduxjs/toolkit").EnhancedStore} store
- * @returns {() => void} unsubscribe (можно вызвать, если нужно отключить)
+
  */
 export function attachCartPersistence(store) {
     let lastSnapshot = JSON.stringify(store.getState().cart.cartItems);
