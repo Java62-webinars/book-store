@@ -5,7 +5,7 @@ import {cartReducer, changeQuantity} from "../cartSlice.js";
 import {catalogReducer} from "../../catalog/catalogSlice.js";
 import {addItemToCart} from "../addItemToCart.js";
 
-import {attachCartPersistence} from "../cartPersistence.js";
+import {cartPersistenceMiddleware} from "../cartPersistenceMiddleware.js";
 import {loadCart} from "../loadCart.js";
 import {STORAGE_KEYS} from "../../../constants/storageKeys.js";
 
@@ -26,7 +26,6 @@ function makeLocalStorageMock() {
         clear: vi.fn(() => {
             data = {};
         }),
-        _dump: () => ({...data}),
     };
 }
 
@@ -37,10 +36,12 @@ function makeStore(preloadedState) {
             cart: cartReducer,
         },
         preloadedState,
+        middleware: (getDefaultMiddleware) =>
+            getDefaultMiddleware().concat(cartPersistenceMiddleware),
     });
 }
 
-describe("cart localStorage integration: hydrate + subscribe persistence", () => {
+describe("cart localStorage integration: hydrate + middleware persistence", () => {
     beforeEach(() => {
         // Важно: storageClient читает globalThis.localStorage
         // @ts-ignore
@@ -51,10 +52,10 @@ describe("cart localStorage integration: hydrate + subscribe persistence", () =>
         localStorage.setItem(
             STORAGE_KEYS.CART,
             JSON.stringify([
-                {isbn: "111", quantity: 2},   // ok
-                {isbn: "", quantity: 3},      // invalid
-                {isbn: "222", quantity: -1},  // invalid
-                {isbn: "333", quantity: 1},   // ok
+                {isbn: "111", quantity: 2}, // ok
+                {isbn: "", quantity: 3}, // invalid
+                {isbn: "222", quantity: -1}, // invalid
+                {isbn: "333", quantity: 1}, // ok
             ])
         );
 
@@ -67,24 +68,20 @@ describe("cart localStorage integration: hydrate + subscribe persistence", () =>
         ]);
     });
 
-    it("subscribe: saves cart when cart changes, and does NOT save when only catalog actions dispatch", () => {
+    it("middleware: saves cart when cart changes, and does NOT save when only catalog actions dispatch", () => {
         const store = makeStore({
             catalog: {
-                items: [
-                    {isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false},
-                ],
+                items: [{isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false}],
                 info: null,
                 error: null,
             },
         });
 
-        attachCartPersistence(store);
-
-        // 1) dispatch в каталог (любой action) — subscribe сработает, но cart не менялся
+        // 1) dispatch в каталог (любой action) — middleware должен проигнорировать (не cart/*)
         store.dispatch({type: "catalog/TEST_NOOP"});
         expect(localStorage.setItem).toHaveBeenCalledTimes(0);
 
-        // 2) добавляем книгу в cart (thunk)
+        // 2) добавляем книгу в cart (thunk) — будет запись
         store.dispatch(addItemToCart("111"));
         expect(localStorage.setItem).toHaveBeenCalledTimes(1);
 
@@ -99,23 +96,17 @@ describe("cart localStorage integration: hydrate + subscribe persistence", () =>
         expect(saved2).toEqual([{isbn: "111", quantity: 3}]);
     });
 
-    it("subscribe: removes key when cart becomes empty", () => {
+    it("middleware: removes key when cart becomes empty", () => {
         const store = makeStore({
             catalog: {
-                items: [
-                    {isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false},
-                ],
+                items: [{isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false}],
                 info: null,
                 error: null,
             },
         });
 
-        attachCartPersistence(store);
-
         store.dispatch(addItemToCart("111"));
-        expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.CART))).toEqual([
-            {isbn: "111", quantity: 1},
-        ]);
+        expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.CART))).toEqual([{isbn: "111", quantity: 1}]);
 
         // newQuantity=0 → твой reducer удаляет item (как в текущей логике)
         store.dispatch(changeQuantity({isbn: "111", newQuantity: 0}));
@@ -123,6 +114,7 @@ describe("cart localStorage integration: hydrate + subscribe persistence", () =>
         expect(localStorage.removeItem).toHaveBeenCalledTimes(1);
         expect(localStorage.getItem(STORAGE_KEYS.CART)).toBeNull();
     });
+
     it("round-trip: store A saves cart to localStorage, store B restores it via loadCart()", () => {
         // --- STORE A: добавляем в корзину и убеждаемся, что данные ушли в localStorage
         const storeA = makeStore({
@@ -135,8 +127,6 @@ describe("cart localStorage integration: hydrate + subscribe persistence", () =>
                 error: null,
             },
         });
-
-        attachCartPersistence(storeA);
 
         // Добавим 2 книги
         storeA.dispatch(addItemToCart("111"));
@@ -164,5 +154,4 @@ describe("cart localStorage integration: hydrate + subscribe persistence", () =>
             {isbn: "222", quantity: 1},
         ]);
     });
-
 });
