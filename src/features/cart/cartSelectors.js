@@ -1,3 +1,5 @@
+import {classifyCartAgainstCatalog} from "../../entities/cart/classifyCartAgainstCatalog.js";
+
 /** @param {any} state */
 export const selectCartState = (state) => state.cart;
 // -------------------------
@@ -110,3 +112,68 @@ export const selectCartDetailedItems = (state) => {
  */
 export const selectCartTotalPrice = (state) =>
     selectCartDetailedItems(state).reduce((sum, item) => sum + item.lineTotal, 0);
+
+// -------------------------
+// Consistency selectors (cart ↔ catalog)
+// -------------------------
+
+/**
+ * Возвращает строки корзины, которые нельзя корректно "посчитать" относительно каталога.
+ * Причины:
+ * - MISSING: книги нет в каталоге (ISBN изменили/книгу удалили)
+ * - OUT_OF_STOCK: книга есть, но снята с продажи
+ *
+ * @param {any} state
+ * @returns {Array<{isbn:any, quantity:number, reason:"MISSING"|"OUT_OF_STOCK"}>}
+ */
+export const selectCartInvalidLines = (state) => {
+    const cartItems = selectCartItems(state);
+    const catalogItems = safeSelectCatalogItems(state);
+
+    const {invalid} = classifyCartAgainstCatalog(cartItems, catalogItems);
+
+    return invalid.map(({cartItem, reason}) => ({
+        isbn: cartItem?.isbn,
+        quantity: cartItem?.quantity,
+        reason,
+    }));
+};
+
+/**
+ * Количество невалидных строк корзины.
+ *
+ * @param {any} state
+ */
+export const selectCartInvalidCount = (state) => selectCartInvalidLines(state).length;
+
+/**
+ * "Безопасные" итоги корзины:
+ * - учитываем только позиции, которые:
+ *   1) существуют в каталоге
+ *   2) не сняты с продажи
+ *
+ * @param {any} state
+ * @returns {{totalBooks:number, subtotal:number, invalidCount:number}}
+ */
+export const selectCartTotalsSafe = (state) => {
+    const cartItems = selectCartItems(state);
+    const catalogItems = safeSelectCatalogItems(state);
+
+    const {valid, invalid} = classifyCartAgainstCatalog(cartItems, catalogItems);
+
+    let totalBooks = 0;
+    let subtotal = 0;
+
+    for (const {cartItem, book} of valid) {
+        const quantity = Number(cartItem?.quantity ?? 0);
+        const price = typeof book?.price === "number" ? book.price : Number(book?.price ?? 0);
+        totalBooks += quantity;
+        subtotal += price * quantity;
+    }
+
+    return {
+        totalBooks,
+        subtotal,
+        invalidCount: invalid.length,
+    };
+};

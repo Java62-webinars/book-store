@@ -5,7 +5,7 @@ import {cartReducer, changeQuantity} from "../cartSlice.js";
 import {catalogReducer} from "../../catalog/catalogSlice.js";
 import {addItemToCart} from "../addItemToCart.js";
 
-import {cartPersistenceMiddleware} from "../cartPersistenceMiddleware.js";
+import {cartPersistenceListenerMiddleware} from "../cartPersistenceListenerMiddleware.js";
 import {loadCart} from "../loadCart.js";
 import {STORAGE_KEYS} from "../../../constants/storageKeys.js";
 
@@ -15,17 +15,24 @@ import {STORAGE_KEYS} from "../../../constants/storageKeys.js";
  */
 function makeLocalStorageMock() {
     let data = {};
+    const removeStacks = [];
+
     return {
         getItem: vi.fn((k) => (k in data ? data[k] : null)),
         setItem: vi.fn((k, v) => {
             data[k] = String(v);
         }),
         removeItem: vi.fn((k) => {
+            removeStacks.push({key: k, stack: new Error("removeItem stack").stack});
             delete data[k];
         }),
         clear: vi.fn(() => {
             data = {};
+            removeStacks.length = 0;
         }),
+
+        //  даём доступ к собранным стекам
+        _removeStacks: () => removeStacks.slice(),
     };
 }
 
@@ -35,9 +42,8 @@ function makeStore(preloadedState) {
             catalog: catalogReducer,
             cart: cartReducer,
         },
+        middleware: (getDefaultMiddleware) => getDefaultMiddleware().concat(cartPersistenceListenerMiddleware),
         preloadedState,
-        middleware: (getDefaultMiddleware) =>
-            getDefaultMiddleware().concat(cartPersistenceMiddleware),
     });
 }
 
@@ -52,14 +58,15 @@ describe("cart localStorage integration: hydrate + middleware persistence", () =
         localStorage.setItem(
             STORAGE_KEYS.CART,
             JSON.stringify([
-                {isbn: "111", quantity: 2}, // ok
-                {isbn: "", quantity: 3}, // invalid
-                {isbn: "222", quantity: -1}, // invalid
-                {isbn: "333", quantity: 1}, // ok
+                {isbn: "111", quantity: 2},   // ok
+                {isbn: "", quantity: 3},      // invalid
+                {isbn: "222", quantity: -1},  // invalid
+                {isbn: "333", quantity: 1},   // ok
             ])
         );
 
         const store = makeStore();
+
         store.dispatch(loadCart());
 
         expect(store.getState().cart.cartItems).toEqual([
@@ -71,13 +78,15 @@ describe("cart localStorage integration: hydrate + middleware persistence", () =
     it("middleware: saves cart when cart changes, and does NOT save when only catalog actions dispatch", () => {
         const store = makeStore({
             catalog: {
-                items: [{isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false}],
+                items: [
+                    {isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false},
+                ],
                 info: null,
                 error: null,
             },
         });
 
-        // 1) dispatch в каталог (любой action) — middleware должен проигнорировать (не cart/*)
+        // 1) dispatch в каталог — listener должен проигнорировать (не cart/*)
         store.dispatch({type: "catalog/TEST_NOOP"});
         expect(localStorage.setItem).toHaveBeenCalledTimes(0);
 
@@ -96,10 +105,12 @@ describe("cart localStorage integration: hydrate + middleware persistence", () =
         expect(saved2).toEqual([{isbn: "111", quantity: 3}]);
     });
 
-    it("middleware: removes key when cart becomes empty", () => {
+    it("middleware: removes key when cart becomes empty", async () => {
         const store = makeStore({
             catalog: {
-                items: [{isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false}],
+                items: [
+                    {isbn: "111", title: "B1", author: "A1", price: 10, flagOutOfStock: false},
+                ],
                 info: null,
                 error: null,
             },
@@ -108,15 +119,18 @@ describe("cart localStorage integration: hydrate + middleware persistence", () =
         store.dispatch(addItemToCart("111"));
         expect(JSON.parse(localStorage.getItem(STORAGE_KEYS.CART))).toEqual([{isbn: "111", quantity: 1}]);
 
-        // newQuantity=0 → твой reducer удаляет item (как в текущей логике)
         store.dispatch(changeQuantity({isbn: "111", newQuantity: 0}));
 
-        expect(localStorage.removeItem).toHaveBeenCalledTimes(1);
+        // дать listener’у завершить effect (в watch это важно)
+        await Promise.resolve();
+
+        const removedKeys = localStorage.removeItem.mock.calls.map(([k]) => k);
+        expect(removedKeys).toContain(STORAGE_KEYS.CART);
         expect(localStorage.getItem(STORAGE_KEYS.CART)).toBeNull();
     });
 
     it("round-trip: store A saves cart to localStorage, store B restores it via loadCart()", () => {
-        // --- STORE A: добавляем в корзину и убеждаемся, что данные ушли в localStorage
+        // --- STORE A
         const storeA = makeStore({
             catalog: {
                 items: [
@@ -128,27 +142,20 @@ describe("cart localStorage integration: hydrate + middleware persistence", () =
             },
         });
 
-        // Добавим 2 книги
         storeA.dispatch(addItemToCart("111"));
         storeA.dispatch(addItemToCart("222"));
-
-        // Изменим количество одной
         storeA.dispatch(changeQuantity({isbn: "111", newQuantity: 3}));
 
-        // Проверяем: localStorage содержит итоговую корзину
         const saved = JSON.parse(localStorage.getItem(STORAGE_KEYS.CART));
         expect(saved).toEqual([
             {isbn: "111", quantity: 3},
             {isbn: "222", quantity: 1},
         ]);
 
-        // --- STORE B: "новый запуск приложения"
+        // --- STORE B
         const storeB = makeStore();
-
-        // На старте приложения вызывается гидратация
         storeB.dispatch(loadCart());
 
-        // Проверяем: корзина восстановилась из localStorage
         expect(storeB.getState().cart.cartItems).toEqual([
             {isbn: "111", quantity: 3},
             {isbn: "222", quantity: 1},
