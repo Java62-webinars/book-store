@@ -1,16 +1,30 @@
-import {setError, toggleOutOfStockByIsbn} from "../catalogSlice.js";
+import {setError, updateBookByIsbn} from "../catalogSlice.js";
 import {saveCatalogToStorage} from "../catalogStorage.js";
+import {changeAvailabilityRequest} from "../../../api/api.js";
 
 export function toggleBookAvailability(isbn) {
-    return (dispatch, getState) => {
+    return async (dispatch, getState) => {
         const {items} = getState().catalog;
-        const exists = items.find((book) => book.isbn === isbn);
-        if (!exists) {
+        const existing = items.find((book) => book.isbn === isbn);
+
+        if (!existing) {
             dispatch(setError("Book with isbn not found"));
             return;
         }
 
-        dispatch(toggleOutOfStockByIsbn(isbn));
-        saveCatalogToStorage(getState().catalog.items);
-    }
+        const nextFlag = !existing.flagOutOfStock;
+
+        try {
+            const updatedBook = await changeAvailabilityRequest(isbn, nextFlag);
+
+            dispatch(updateBookByIsbn({
+                originalIsbn: isbn,
+                next: updatedBook,
+            }));
+
+            saveCatalogToStorage(getState().catalog.items);
+        } catch (error) {
+            dispatch(setError(error.message));
+        }
+    };
 }
