@@ -1,19 +1,51 @@
 import {useState} from "react";
-import {useSelector} from "react-redux";
+import {useDispatch, useSelector} from "react-redux";
 
 import Burger from "./Burger.jsx";
 import FlyingBooks from "./FlyingBooks.jsx";
 import {selectCartTotals} from "../features/cart/cartSelectors.js";
+import {selectCurrentUser} from "../features/auth/authSelectors.js";
+import {logout, setCurrentUser} from "../features/auth/authSlice.js";
+import {clearAuthStorage, saveAuthToStorage} from "../features/auth/authStorage.js";
 
 const Header = ({onCartClick}) => {
     const [book, setBook] = useState("");
+    const dispatch = useDispatch();
 
     const {totalBooks} = useSelector(selectCartTotals);
+    const currentUser = useSelector(selectCurrentUser);
 
     const handleBook = (e) => {
         e.preventDefault();
         console.log("Searching for:", book);
         setBook(book);
+    };
+
+    const handleLoginAsAdmin = () => {
+        const adminUser = {
+            id: "demo-admin",
+            name: "Admin",
+            role: "admin",
+        };
+
+        dispatch(setCurrentUser(adminUser));
+        saveAuthToStorage(adminUser);
+    };
+
+    const handleLoginAsUser = () => {
+        const user = {
+            id: "demo-user",
+            name: "User",
+            role: "user",
+        };
+
+        dispatch(setCurrentUser(user));
+        saveAuthToStorage(user);
+    };
+
+    const handleLogout = () => {
+        dispatch(logout());
+        clearAuthStorage();
     };
 
     const cartIcon = totalBooks > 0 ? "/full.png" : "/empty.png";
@@ -24,9 +56,7 @@ const Header = ({onCartClick}) => {
       bg-[url('/bookhaven1.png')] bg-center bg-contain
       bg-no-repeat h-20"
         >
-            {/* ОБЩИЙ FLEX-КОНТЕЙНЕР */}
             <div className="flex items-center justify-between">
-                {/* 🟢 ЛЕВАЯ ЧАСТЬ */}
                 <div className="flex items-center gap-3">
                     <Burger/>
 
@@ -48,9 +78,7 @@ const Header = ({onCartClick}) => {
                     <FlyingBooks/>
                 </div>
 
-                {/* 🔵 ПРАВАЯ ЧАСТЬ */}
                 <div className="flex items-center gap-2">
-                    {/* Cart button */}
                     <button
                         type="button"
                         onClick={onCartClick}
@@ -59,20 +87,40 @@ const Header = ({onCartClick}) => {
                     >
                         <img src={cartIcon} alt="Cart" className="w-full h-full object-cover"/>
 
-                        {/* badge */}
                         {totalBooks > 0 && (
                             <span
                                 className="absolute -top-2 -right-2 bg-red-600 text-white text-xs rounded-full px-2 py-0.5">
-                {totalBooks}
-              </span>
+                                {totalBooks}
+                            </span>
                         )}
                     </button>
 
-                    <button className="rounded w-14 h-14 bg-white text-black border-[2px] border-amber-900 btn-hover">
-                        Favorite
+                    <div className="rounded bg-white text-black px-3 py-2 border-[2px] border-amber-900">
+                        {currentUser ? `${currentUser.name} (${currentUser.role})` : "Guest"}
+                    </div>
+
+                    <button
+                        type="button"
+                        onClick={handleLoginAsUser}
+                        className="rounded px-3 py-2 bg-white text-black border-[2px] border-amber-900 btn-hover"
+                    >
+                        User
                     </button>
-                    <button className="rounded w-14 h-14 bg-white text-black border-[2px] border-amber-900 btn-hover">
-                        Log in
+
+                    <button
+                        type="button"
+                        onClick={handleLoginAsAdmin}
+                        className="rounded px-3 py-2 bg-white text-black border-[2px] border-amber-900 btn-hover"
+                    >
+                        Admin
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleLogout}
+                        className="rounded px-3 py-2 bg-white text-black border-[2px] border-amber-900 btn-hover"
+                    >
+                        Logout
                     </button>
                 </div>
             </div>

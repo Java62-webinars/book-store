@@ -1,14 +1,16 @@
-import {useDispatch} from "react-redux";
+import {useDispatch, useSelector} from "react-redux";
 import {useState} from "react";
 
 import {addItemToCart} from "../../features/cart/addItemToCart.js";
 import {toggleBookAvailability} from "../../features/catalog/thunks/toggleBookAvailability.js";
+import {selectIsAdmin} from "../../features/auth/authSelectors.js";
 
 import BookItemEdit from "./BookItemEdit.jsx";
 
 function BookItem({book}) {
     const dispatch = useDispatch();
     const [isEditing, setIsEditing] = useState(false);
+    const isAdmin = useSelector(selectIsAdmin);
 
     const handleAddToCart = () => {
         dispatch(addItemToCart(book.isbn));
@@ -32,33 +34,35 @@ function BookItem({book}) {
             </div>
 
             <div className="mt-4 flex gap-2">
-                {/* Add to cart */}
-                <button
-                    onClick={handleAddToCart}
-                    disabled={book.flagOutOfStock}
-                    className="bg-emerald-700 text-white px-3 py-2 rounded btn-hover text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                    Add to cart
-                </button>
+                {!isAdmin && (
+                    <button
+                        onClick={handleAddToCart}
+                        disabled={book.flagOutOfStock}
+                        className="bg-emerald-700 text-white px-3 py-2 rounded btn-hover text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Add to cart
+                    </button>
+                )}
 
-                {/* Take off sale / Return to sale */}
-                <button
-                    onClick={handleToggleSale}
-                    className="bg-blue-900 text-white px-3 py-2 rounded btn-hover text-sm"
-                >
-                    {book.flagOutOfStock ? "Return to sale" : "Take off sale"}
-                </button>
+                {isAdmin && (
+                    <>
+                        <button
+                            onClick={handleToggleSale}
+                            className="bg-blue-900 text-white px-3 py-2 rounded btn-hover text-sm"
+                        >
+                            {book.flagOutOfStock ? "Return to sale" : "Take off sale"}
+                        </button>
 
-                {/* Edit */}
-                <button
-                    onClick={() => setIsEditing(true)}
-                    className="bg-white text-black border-2 border-amber-900 px-3 py-2 rounded btn-hover text-sm"
-                >
-                    Edit
-                </button>
+                        <button
+                            onClick={() => setIsEditing(true)}
+                            className="bg-white text-black border-2 border-amber-900 px-3 py-2 rounded btn-hover text-sm"
+                        >
+                            Edit
+                        </button>
+                    </>
+                )}
             </div>
 
-            {/* Overlay from design CSS */}
             <div className="card-overlay">
                 <div>
                     <div>
